@@ -1,0 +1,164 @@
+{
+	"name": "dataProcess",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "aspvedity",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/3c2c5d93-460a-4e73-adb0-248b6a984147/resourceGroups/AzureDatabricksGroup/providers/Microsoft.Synapse/workspaces/synapsevedity/bigDataPools/aspvedity",
+				"name": "aspvedity",
+				"type": "Spark",
+				"endpoint": "https://synapsevedity.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/aspvedity",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.1",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			}
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"outputs_hidden": true
+					}
+				},
+				"source": [
+					"#Cases & Deaths Transformation\r\n",
+					"try :\r\n",
+					"    from pyspark.sql import SparkSession\r\n",
+					"    from pyspark.sql.types import *\r\n",
+					"    account_name = \"adlsvedity\"\r\n",
+					"    source_container_name = \"stage\"\r\n",
+					"    source_relative_path = \"ecdc\"\r\n",
+					"    sink_container_name=\"curated\"\r\n",
+					"    sink_relative_path = \"ecdc/asp/cases\"\r\n",
+					"    adls_stage_path = 'abfss://%s@%s.dfs.core.windows.net/%s' % (source_container_name, account_name, source_relative_path)\r\n",
+					"    adls_curated_path = 'abfss://%s@%s.dfs.core.windows.net/%s' % (sink_container_name, account_name, sink_relative_path)\r\n",
+					"    \r\n",
+					"    #Read\r\n",
+					"    try :\r\n",
+					"        # Azure storage access info #Read data from Stage folder and transform for cases and deaths column\r\n",
+					"        df_cases_csv_read = spark.read.option('header', 'true') \\\r\n",
+					"                .option('delimiter', ',') \\\r\n",
+					"                .csv(adls_stage_path + '/cases_deaths.csv')\r\n",
+					"        df_cases_csv_read.createOrReplaceTempView(\"cases_deaths_csv\")        \r\n",
+					"        df_transform_column=spark.sql(\"select country,country_code,continent,population,year_week,sum(case when indicator='cases' then weekly_count else 0 end) cases,sum(case when indicator='deaths' then weekly_count else 0 end) deaths,rate_14_day,cumulative_count,source from  cases_deaths_csv  where country not like '%total%' group by country,country_code,continent,population,year_week,rate_14_day,cumulative_count,source\")\r\n",
+					"        \r\n",
+					"        #create temp view for data transformation\r\n",
+					"        df_transform_column.createOrReplaceTempView(\"casesDeaths_v\")\r\n",
+					"        \r\n",
+					"    except Exception  as e:\r\n",
+					"        if hasattr(e, 'message'):\r\n",
+					"            print(e.message)\r\n",
+					"        else:\r\n",
+					"            print(e)\r\n",
+					"            \r\n",
+					"             #Display Data\r\n",
+					"\r\n",
+					"    df_transform_yearMonth=spark.sql(\"select cdv.*,substring(cdv.year_week,1,4) as years,extract(month from date_add(to_date(concat(substring(cdv.year_week,1,4),'-01-01'),'yyyy-MM-dd'),cast(substring(cdv.year_week,6,7) as integer)*6)) as months,concat(substring(cdv.year_week,1,4),'-',extract(month from date_add(to_date(concat(substring(cdv.year_week,1,4),'-01-01'),'yyyy-MM-dd'),cast(substring(cdv.year_week,6,7) as integer)*6))) yearMonth from casesDeaths_v cdv\")\r\n",
+					"    #Write\r\n",
+					"    df_transform_yearMonth.coalesce(1).write.format(\"delta\").mode(\"overwrite\").option(\"mergeSchema\", \"true\").partitionBy(\"continent\").save(adls_curated_path)     \r\n",
+					"except Exception  as e:\r\n",
+					"        if hasattr(e, 'message'):\r\n",
+					"            print(e.message)\r\n",
+					"        else:\r\n",
+					"            print(e)"
+				],
+				"attachments": null,
+				"execution_count": 1
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": true
+				},
+				"source": [
+					"#Hospitals & Icus Transformation\r\n",
+					"try :\r\n",
+					"    from pyspark.sql import SparkSession\r\n",
+					"    from pyspark.sql.types import *\r\n",
+					"    account_name = \"adlsvedity\"\r\n",
+					"    source_container_name = \"stage\"\r\n",
+					"    source_relative_path = \"ecdc\"\r\n",
+					"    sink_container_name=\"curated\"\r\n",
+					"    sink_relative_path = \"ecdc/asp/hospitals\"\r\n",
+					"    adls_stage_path = 'abfss://%s@%s.dfs.core.windows.net/%s' % (source_container_name, account_name, source_relative_path)\r\n",
+					"    adls_curated_path = 'abfss://%s@%s.dfs.core.windows.net/%s' % (sink_container_name, account_name, sink_relative_path)\r\n",
+					"    \r\n",
+					"    #Read\r\n",
+					"    try :\r\n",
+					"        # Azure storage access info #Read data from Stage folder and transform for cases and deaths column\r\n",
+					"        df_hospital_csv_read = spark.read.option('header', 'true') \\\r\n",
+					"                .option('delimiter', ',') \\\r\n",
+					"                .csv(adls_stage_path + '/hospital_icu.csv')\r\n",
+					"        df_hospital_csv_read.createOrReplaceTempView(\"hospital_icu_csv\")        \r\n",
+					"        df_transform_column=spark.sql(\"select country,year_week,sum(case when indicator='Daily ICU occupancy' then value else 0 end) icu,sum(case when indicator='Daily hospital occupancy' then value else 0 end) hospital,url,source from hospital_icu_csv where (indicator='Daily ICU occupancy' or indicator=='Daily hospital occupancy') group by country,year_week,url,source\")\r\n",
+					"        \r\n",
+					"        #create temp view for data transformation\r\n",
+					"        df_transform_column.createOrReplaceTempView(\"hospitalICU_v\")\r\n",
+					"        \r\n",
+					"    except Exception  as e:\r\n",
+					"        if hasattr(e, 'message'):\r\n",
+					"            print(e.message)\r\n",
+					"        else:\r\n",
+					"            print(e)\r\n",
+					"            \r\n",
+					"             #Display Data\r\n",
+					"\r\n",
+					"    df_transform_yearMonth=spark.sql(\"select cdv.*,substring(cdv.year_week,1,4) as years,extract(month from date_add(to_date(concat(substring(cdv.year_week,1,4),'-01-01'),'yyyy-MM-dd'),cast(substring(cdv.year_week,7,8) as integer)*6)) as months,concat(substring(cdv.year_week,1,4),'-',extract(month from date_add(to_date(concat(substring(cdv.year_week,1,4),'-01-01'),'yyyy-MM-dd'),cast(substring(cdv.year_week,7,8) as integer)*6))) yearMonth from hospitalIcu_v cdv\")\r\n",
+					"    #Write\r\n",
+					"    df_transform_yearMonth.coalesce(1).write.format(\"delta\").mode(\"overwrite\").option(\"mergeSchema\", \"true\").save(adls_curated_path)     \r\n",
+					"except Exception  as e:\r\n",
+					"        if hasattr(e, 'message'):\r\n",
+					"            print(e.message)\r\n",
+					"        else:\r\n",
+					"            print(e)"
+				],
+				"attachments": null,
+				"execution_count": 2
+			}
+		]
+	}
+}

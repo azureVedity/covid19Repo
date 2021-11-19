@@ -1,0 +1,17 @@
+{
+	"name": "covid19_external_cases_to_db_prc",
+	"properties": {
+		"content": {
+			"query": "SELECT\n    TOP 100 *\nFROM\n    OPENROWSET(\n        BULK 'https://adlsvedity.dfs.core.windows.net/curated/ecdc/hospitals/part-00000-f980b1f1-6dca-43c1-bb31-1e9ee9b65ecf-c000.snappy.parquet',\n        FORMAT='PARQUET'\n    ) AS [result]\n\ndrop external table ecdc.sink_hospitals_icus_ext\n\ncreate external table [dbo].[ecdc.hospitals_icus_ext] (\n    country  varchar(8000),\n    year_week  varchar(10),\n    source    varchar(8000),\n    url    varchar(8000),\n    year SMALLINT,\n    months smallint,\n    date date,\n    icu_count float,\n    hospital_count float    \n) \nWITH (\n    LOCATION = 'ecdc/hospitals/*.parquet',\n \tDATA_SOURCE = ecdc_curated_ds,\n\tFILE_FORMAT = ecdc_parquet_format\n\t);\nGO\n\n\ndrop table [dbo].[ecdc.cases_deaths_tbl] \n\nselect * from  [dbo].[ecdc.cases_deaths_ext];\n\nselect * into [ecdc.cases_deaths_tbl] from ecdc.cases_deaths_ext\n\nselect * from [ecdc.hospitals_icus_tbl]\n\nEXEC [ecdc.covid19_external_cases_to_db_prc] \n\nEXEC [ecdc.covid19_external_hospitals_to_db_prc]\n\nALTER PROCEDURE [ecdc.covid19_external_cases_to_db_prc]  AS\n\nBEGIN\n/**********************************************************************************************\n   NAME     :  [ecdc.covid19_external_cases_to_db_prc]\n   PURPOSE  :  This sp is used to populate ecdc_covid_cases tables from external tables.\n   REVISIONS:\n   Ver        Date\t\t\tAuthor                    Description\n   ---------  ----------\t\t---------------\t\t------------------------------------\n   1.0        02-Sep-2021\t\tMehul                Initial Version.\n\n--EXEC [ecdc.covid19_external_cases_to_db_prc] \n\n**********************************************************************************************/  \nDECLARE\n@ldate date,\n@lcount bigint,\n@lerror varchar(max);\n\nBEGIN TRY\n\nselect   @lcount = count(*)  from  [dbo].[ecdc.cases_deaths_tbl];\n        \nIF @lcount>0 \nBEGIN\ndelete from  [dbo].[ecdc.cases_deaths_tbl];\nEND;\n\ninsert into [dbo].[ecdc.cases_deaths_tbl]\nselect * from  ecdc.cases_deaths_ext where country not like '%total%'\n\nEND TRY\nBEGIN CATCH\nSELECT @lerror = Error_Message()\nselect @lerror as errorMessage\nEND CATCH\n\nBEGIN TRY\n\nselect   @lcount = count(*)  from  [dbo].[ecdc.casesDeaths_cube];\n        \nIF @lcount>0 \nBEGIN\ndelete from  [dbo].[ecdc.casesDeaths_cube];\nEND;\n\ninsert into [dbo].[ecdc.casesDeaths_cube]\nSELECT a.*,concat(year,'-',month) yearMonth FROM casesDeathsView a;\n\nEND TRY\nBEGIN CATCH\nSELECT @lerror = Error_Message()\nselect @lerror as errorMessage\nEND CATCH\n\nEND;\n",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "poc_sqldw",
+				"poolName": "poc_sqldw"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}
