@@ -1,0 +1,74 @@
+{
+	"name": "init_spark",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "fb9e564d-5169-4cf6-9e38-aa3a9a8e9141"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "python"
+			},
+			"language_info": {
+				"name": "python"
+			}
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"#Cases & Deaths Transformation\r\n",
+					"try :\r\n",
+					"    from pyspark.sql import SparkSession\r\n",
+					"    from pyspark.sql.types import *\r\n",
+					"    account_name = \"adlsvedity\"\r\n",
+					"    source_container_name = \"azurepoc\"\r\n",
+					"    source_relative_path = \"master\"\r\n",
+					"    adls_master_path = 'abfss://%s@%s.dfs.core.windows.net/%s' % (source_container_name, account_name, source_relative_path)\r\n",
+					"    \r\n",
+					"    #Read\r\n",
+					"    try :\r\n",
+					"        # Azure storage access info #Read data from Stage folder and transform for cases and deaths column\r\n",
+					"        df_project_read = spark.read.option('header', 'true') \\\r\n",
+					"                .option('delimiter', ',') \\\r\n",
+					"                .csv(adls_master_path + '/project.csv')\r\n",
+					"        df_project_read.createOrReplaceTempView(\"project_tbl\")        \r\n",
+					"        df_project_select=spark.sql(\"select * from project_tbl\")\r\n",
+					"        \r\n",
+					"        df_project_select.show()\r\n",
+					"        \r\n",
+					"    except Exception  as e:\r\n",
+					"        if hasattr(e, 'message'):\r\n",
+					"            print(e.message)\r\n",
+					"        else:\r\n",
+					"            print(e)\r\n",
+					"            \r\n",
+					"except Exception  as e:\r\n",
+					"        if hasattr(e, 'message'):\r\n",
+					"            print(e.message)\r\n",
+					"        else:\r\n",
+					"            print(e)"
+				],
+				"attachments": null,
+				"execution_count": null
+			}
+		]
+	}
+}
