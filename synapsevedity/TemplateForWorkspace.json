@@ -1,0 +1,255 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"type": "string",
+			"metadata": "Workspace name",
+			"defaultValue": "synapsevedity"
+		},
+		"ls_synapseSql_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'ls_synapseSql'"
+		},
+		"synapsevedity-WorkspaceDefaultSqlServer_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'synapsevedity-WorkspaceDefaultSqlServer'"
+		},
+		"synapsevedity-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://adlsvedity.dfs.core.windows.net"
+		}
+	},
+	"variables": {
+		"workspaceId": "[concat('Microsoft.Synapse/workspaces/', parameters('workspaceName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('workspaceName'), '/ls_synapseSql')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlDatabase",
+				"typeProperties": {
+					"connectionString": "[parameters('ls_synapseSql_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/synapsevedity-WorkspaceDefaultSqlServer')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"parameters": {
+					"DBName": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlDW",
+				"typeProperties": {
+					"connectionString": "[parameters('synapsevedity-WorkspaceDefaultSqlServer_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/synapsevedity-WorkspaceDefaultStorage')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('synapsevedity-WorkspaceDefaultStorage_properties_typeProperties_url')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AutoResolveIntegrationRuntime')]",
+			"type": "Microsoft.Synapse/workspaces/integrationRuntimes",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "Managed",
+				"typeProperties": {
+					"computeProperties": {
+						"location": "AutoResolve",
+						"dataFlowProperties": {
+							"computeType": "General",
+							"coreCount": 8,
+							"timeToLive": 0
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/WorkspaceSystemIdentity')]",
+			"type": "Microsoft.Synapse/workspaces/credentials",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "ManagedIdentity",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/SQL script 1')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "master",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ecdc_DDL')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "-- create schema\ncreate schema ecdc;\n\nIF NOT EXISTS (SELECT * FROM sys.external_file_formats WHERE name = 'ecdc_parquet_format')\n\tCREATE EXTERNAL FILE FORMAT [ecdc_parquet_format]\n\tWITH ( FORMAT_TYPE = PARQUET)\nGO\n\nIF NOT EXISTS (SELECT * FROM sys.external_data_sources WHERE name = 'ecdc_curated_ds')\n\tCREATE EXTERNAL DATA SOURCE [ecdc_curated_ds]\n\tWITH (\n\t\tLOCATION = 'https://adlsvedity.dfs.core.windows.net/curated/'\n\t)\nGO\n\nSELECT\n    TOP 100 *\nFROM\n    OPENROWSET(\n        BULK 'https://adlsvedity.dfs.core.windows.net/curated/ecdc/cases/part-00000-8abe7eb6-7454-4ac3-9fc8-4d9bfd374c56-c000.snappy.parquet',\n        FORMAT='PARQUET'\n    ) AS [result]\n\n--drop external table [dbo].[ecdc.cases_deaths_ext]\n\nCREATE EXTERNAL TABLE [dbo].[ecdc.cases_deaths_ext]\n(\n\t[country] [varchar](8000) NULL,\n\t[continent] [varchar](8000) NULL,\n\t[source] [varchar](8000) NULL,\n\t[population] [varchar](8000) NULL,\n\t[year_week] [varchar](10) NULL,\n\t[country_code] [varchar](8000) NULL,\n\t[year] [smallint] NULL,\n\t[month] [smallint] NULL,\n    [yearMonth] [varchar](10) NULL,\n\t[cases] [bigint] NULL,\n\t[deaths] [bigint] NULL\n)\nWITH (DATA_SOURCE = [ecdc_curated_ds],LOCATION = N'ecdc/cases/*.parquet',FILE_FORMAT = [ecdc_parquet_format],REJECT_TYPE = VALUE,REJECT_VALUE = 0)\nGO\n\nCREATE TABLE [dbo].[ecdc.cases_deaths_tbl]\n(\n\t[country] [varchar](8000) NULL,\n\t[continent] [varchar](8000) NULL,\n\t[source] [varchar](8000) NULL,\n\t[population] [varchar](8000) NULL,\n\t[year_week] [varchar](10) NULL,\n\t[country_code] [varchar](8000) NULL,\n\t[year] [smallint] NULL,\n\t[month] [smallint] NULL,\n\t[yearMonth] [varchar](10) NULL,\n\t[cases] [bigint] NULL,\n\t[deaths] [bigint] NULL\n)\nWITH\n(\nCLUSTERED COLUMNSTORE INDEX,  DISTRIBUTION = HASH([country]),  PARTITION (\n[year] RANGE RIGHT FOR VALUES (\n'2019','2020', '2021'))\n)\nGO\n\n--select distinct year from [dbo].[ecdc.cases_deaths_tbl]\n\nCREATE VIEW [dbo].[casesDeathsView]\nAS select  country , continent,year,month, SUM(cases) AS totalCases,SUM(deaths) AS totalDeaths\nfrom [dbo].[ecdc.cases_deaths_tbl] \ngroup by country, continent,year,month\nUNION ALL\nselect  country , null as continent, null as year, null as month, SUM(cases) AS totalCases,SUM(deaths) AS totalDeaths\nfrom [dbo].[ecdc.cases_deaths_tbl]  \ngroup by country\nUNION ALL\nselect  null as country , continent, null as year, null as month, SUM(cases) AS totalCases,SUM(deaths) AS totalDeaths\nfrom [dbo].[ecdc.cases_deaths_tbl]  \ngroup by continent\nUNION ALL\nselect  null as country , null as continent, year, null as month, SUM(cases) AS totalCases,SUM(deaths) AS totalDeaths\nfrom [dbo].[ecdc.cases_deaths_tbl]  \ngroup by year\nUNION ALL\nselect  null as country , null as continent, null as year, month, SUM(cases) AS totalCases,SUM(deaths) AS totalDeaths\nfrom [dbo].[ecdc.cases_deaths_tbl]  \ngroup by month;\nGO\n\n\nCREATE TABLE [dbo].[casesDeaths_cube]\n(\n\t[country] [varchar](8000) NULL,\n\t[continent] [varchar](8000) NULL,\n\t[year] [smallint] NULL,\n\t[month] [smallint] NULL,\n\t[totalCases] [bigint] NULL,\n\t[totalDeaths] [bigint] NULL,\n\t[yearMonth] [varchar](13) NOT NULL\n)\nWITH\n(\n\tDISTRIBUTION = ROUND_ROBIN,\n\tCLUSTERED COLUMNSTORE INDEX\n)\nGO\n\n\n\n\nCREATE PROC [dbo].[ecdc.covid19_external_cases_to_db_prc] AS\n\nBEGIN\n/**********************************************************************************************\n   NAME     :  [ecdc.covid19_external_cases_to_db_prc]\n   PURPOSE  :  This sp is used to populate ecdc_covid_cases tables from external tables.\n   REVISIONS:\n   Ver        Date\t\t\tAuthor                    Description\n   ---------  ----------\t\t---------------\t\t------------------------------------\n   1.0        02-Sep-2021\t\tMehul                Initial Version.\n\n--EXEC [ecdc.covid19_external_cases_to_db_prc] \n\n**********************************************************************************************/  \nDECLARE\n@ldate date,\n@lcount bigint,\n@lerror varchar(max);\n\nBEGIN TRY\n\nselect   @lcount = count(*)  from  [dbo].[ecdc.cases_deaths_tbl];\n        \nIF @lcount>0 \nBEGIN\ndelete from  [dbo].[ecdc.cases_deaths_tbl];\nEND;\n\ninsert into [dbo].[ecdc.cases_deaths_tbl]\nselect * from  ecdc.cases_deaths_ext where country not like '%total%'\n\nEND TRY\nBEGIN CATCH\nSELECT @lerror = Error_Message()\nselect @lerror as errorMessage\nEND CATCH\n\nBEGIN TRY\n\nselect   @lcount = count(*)  from  [dbo].[ecdc.casesDeaths_cube];\n        \nIF @lcount>0 \nBEGIN\ndelete from  [dbo].[ecdc.casesDeaths_cube];\nEND;\n\ninsert into [dbo].[ecdc.casesDeaths_cube]\nSELECT a.*,concat(year,'-',month) yearMonth FROM casesDeathsView a;\n\nEND TRY\nBEGIN CATCH\nSELECT @lerror = Error_Message()\nselect @lerror as errorMessage\nEND CATCH\n\nEND;\nGO\n\n\nCREATE EXTERNAL TABLE [dbo].[ecdc.hospitals_icus_ext]\n(\n\t[country] [varchar](8000) NULL,\n\t[year_week] [varchar](10) NULL,\n\t[source] [varchar](8000) NULL,\n\t[url] [varchar](8000) NULL,\n\t[year] [smallint] NULL,\n\t[months] [smallint] NULL,\n\t[date] [date] NULL,\n\t[icu_count] [float] NULL,\n\t[hospital_count] [float] NULL\n)\nWITH (DATA_SOURCE = [ecdc_curated_ds],LOCATION = N'ecdc/hospitals/*.parquet',FILE_FORMAT = [ecdc_parquet_format],REJECT_TYPE = VALUE,REJECT_VALUE = 0)\nGO\n\nCREATE TABLE [dbo].[ecdc.hospitals_icus_tbl]\n(\n\t[country] [varchar](8000) NULL,\n\t[year_week] [varchar](10) NULL,\n\t[source] [varchar](8000) NULL,\n\t[url] [varchar](8000) NULL,\n\t[year] [smallint] NULL,\n\t[months] [smallint] NULL,\n\t[date] [date] NULL,\n\t[icu_count] [float] NULL,\n\t[hospital_count] [float] NULL\n)\nWITH\n(\nCLUSTERED COLUMNSTORE INDEX,  DISTRIBUTION = HASH([country]),  PARTITION (\n[year] RANGE RIGHT FOR VALUES (\n'2019','2020', '2021')\n)\n)\nGO\n\n\n\nCREATE PROC [dbo].[ecdc.covid19_external_hospitals_to_db_prc] AS\n\nBEGIN\n/**********************************************************************************************\n   NAME     :  [ecdc.covid19_external_hospitals_to_db_prc]\n   PURPOSE  :  This sp is used to populate ecdc_covid_cases tables from external tables.\n   REVISIONS:\n   Ver        Date\t\t\tAuthor                    Description\n   ---------  ----------\t\t---------------\t\t------------------------------------\n   1.0        02-Sep-2021\t\tMehul                Initial Version.\n\n--EXEC [ecdc.covid19_external_hospitals_to_db_prc] \n\n**********************************************************************************************/  \nDECLARE\n@ldate date,\n@lcount bigint,\n@lerror varchar(max);\n\nBEGIN TRY\n\nselect   @lcount = count(*)  from  [dbo].[ecdc.hospitals_icus_tbl];\n        \nIF @lcount>0 \nBEGIN\ndelete from  [dbo].[ecdc.hospitals_icus_tbl];\nEND;\n\ninsert into [dbo].[ecdc.hospitals_icus_tbl]\nselect * from  ecdc.hospitals_icus_ext;\n\nEND TRY\nBEGIN CATCH\nSELECT @lerror = Error_Message()\nselect @lerror as errorMessage\nEND CATCH\n\nEND;\nGO\n\n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "poc_sqldw",
+						"poolName": "poc_sqldw"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ecdc_covid_cases_exploration')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "SELECT TOP 100 *\nFROM OPENROWSET (BULK 'https://pandemicdatalake.blob.core.windows.net/public/curated/covid-19/ecdc_cases/latest/ecdc_cases.parquet',FORMAT = 'PARQUET') AS [result]\n\n\nCREATE EXTERNAL DATA SOURCE ecdc_cases WITH (\n    LOCATION = 'https://pandemicdatalake.blob.core.windows.net/public/curated/covid-19/ecdc_cases/'\n);\n\n\nCREATE EXTERNAL FILE FORMAT ParquetFormat WITH (  FORMAT_TYPE = PARQUET );\n\ncreate schema ecdc\n\ngo\n\ncreate external table ecdc.cases (\n    date_rep        date,\n    day    smallint,\n    month             smallint,\n    year  smallint,\n    cases smallint,\n    deaths            smallint,\n    countries_and_territories       varchar(8000),\n    geo_id             varchar(8000),\n    country_territory_code           varchar(8000),\n    pop_data_2018           int,\n    continent_exp             varchar(8000),\n    load_date      datetime2(7),\n    iso_country   varchar(8000)\n) with (\n    data_source= ecdc_cases,\n    location = 'latest/ecdc_cases.parquet',\n    file_format = ParquetFormat\n);\nGO\n\n\n\nselect max(date_rep) from  ecdc.cases as a\n\n--select * from ecdc.cases where continent_exp like '%otal%'\n\nselect continent = ISNULL(continent_exp, 'Total'), cases = sum(cases), deaths = sum(deaths)\nfrom  ecdc.cases as a\ngroup by continent_exp \norder by sum(cases) desc\n\nselect top 11 a.countries_and_territories,a.year, a.cases,a.deaths  \nfrom (\nselect countries_and_territories = ISNULL(countries_and_territories, 'Total'), cases = sum(cases), deaths = sum(deaths),'2020' as year\nfrom  ecdc.cases \nwhere date_rep < '2020-12-31'\ngroup by countries_and_territories \n) as a\norder by cases desc\n\nselect concat(year,'-',month) monthName, cases = sum(cases), deaths = sum(deaths)\nfrom ecdc.cases as a\nwhere geo_id = 'IN'\ngroup by concat(year,'-',month)\norder by concat(year,'-',month)\n\nselect  DATE_REP, CASES,\n        CASES_AVG = AVG(CASES) OVER(order by date_rep ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING  )\nfrom ecdc.cases as a\nwhere geo_id = 'IN' order by date_rep\n\nselect DATE_REP, CASES,\n        CUMULATIVE = SUM(CASES) OVER (ORDER BY date_rep)\nfrom ecdc.cases as a\nwhere geo_id = 'IN'\norder by date_rep\n\n\n\nselect top 50  *\nfrom ecdc.cases as a;\n\nselect  TOP 10 date_rep, countries_and_territories,\n        cases,\n        prev = LAG(CASES, 7) OVER(partition by geo_id order by date_rep )\nfrom ecdc.cases as a\norder by date_rep desc;\nGO\n\nselect  TOP 10 date_rep, countries_and_territories,\n        current_avg = AVG(CASES) OVER(partition by geo_id order by date_rep ROWS BETWEEN 7 PRECEDING AND CURRENT ROW  ),\n        prev_avg = AVG(CASES) OVER(partition by geo_id order by date_rep ROWS BETWEEN 14 PRECEDING AND 7 PRECEDING  )\nfrom ecdc.cases as a\norder by date_rep desc;\nGO\n\nselect  TOP 50 date_rep, continent_exp,\n        current_avg = AVG(CASES) OVER(partition by continent_exp order by date_rep ROWS BETWEEN 7 PRECEDING AND CURRENT ROW  ),\n        prev_avg = AVG(CASES) OVER(partition by continent_exp order by date_rep ROWS BETWEEN 14 PRECEDING AND 7 PRECEDING  )\nfrom ecdc.cases as a\norder by date_rep desc;\nGO",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "master",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/init_spark')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "7778dd4c-906b-41ad-b11b-48de7290ebf2"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"enableDebugMode": false,
+					"kernelspec": {
+						"name": "synapse_pyspark",
+						"display_name": "python"
+					},
+					"language_info": {
+						"name": "python"
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"#Cases & Deaths Transformation\r\n",
+							"try :\r\n",
+							"    from pyspark.sql import SparkSession\r\n",
+							"    from pyspark.sql.types import *\r\n",
+							"    account_name = \"adlsvedity\"\r\n",
+							"    source_container_name = \"azurepoc\"\r\n",
+							"    source_relative_path = \"master\"\r\n",
+							"    adls_master_path = 'abfss://%s@%s.dfs.core.windows.net/%s' % (source_container_name, account_name, source_relative_path)\r\n",
+							"    \r\n",
+							"    #Read\r\n",
+							"    try :\r\n",
+							"        # Azure storage access info #Read data from Stage folder and transform for cases and deaths column\r\n",
+							"        df_project_read = spark.read.option('header', 'true') \\\r\n",
+							"                .option('delimiter', ',') \\\r\n",
+							"                .csv(adls_master_path + '/project.csv')\r\n",
+							"        df_project_read.createOrReplaceTempView(\"project_tbl\")        \r\n",
+							"        df_project_select=spark.sql(\"select * from project_tbl\")\r\n",
+							"        \r\n",
+							"        df_project_select.show()\r\n",
+							"        \r\n",
+							"    except Exception  as e:\r\n",
+							"        if hasattr(e, 'message'):\r\n",
+							"            print(e.message)\r\n",
+							"        else:\r\n",
+							"            print(e)\r\n",
+							"            \r\n",
+							"except Exception  as e:\r\n",
+							"        if hasattr(e, 'message'):\r\n",
+							"            print(e.message)\r\n",
+							"        else:\r\n",
+							"            print(e)"
+						],
+						"outputs": [],
+						"execution_count": null
+					}
+				]
+			},
+			"dependsOn": []
+		}
+	]
+}
