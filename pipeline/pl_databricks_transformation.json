@@ -1,0 +1,30 @@
+{
+	"name": "pl_databricks_transformation",
+	"properties": {
+		"activities": [
+			{
+				"name": "ac_db_ecdc_transformations",
+				"type": "DatabricksNotebook",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebookPath": "/Shared/poc/ecdc/transformation/dataProcess"
+				},
+				"linkedServiceName": {
+					"referenceName": "ls_adbvedity",
+					"type": "LinkedServiceReference"
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2021-09-07T17:08:57Z"
+	},
+	"type": "Microsoft.Synapse/workspaces/pipelines"
+}

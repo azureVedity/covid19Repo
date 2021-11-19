@@ -1,0 +1,17 @@
+{
+	"name": "SQL script 7",
+	"properties": {
+		"content": {
+			"query": "\n[dbo].[ecdc.hospitals_icus_tbl]\n\nselect a.year,a.month,a.country,SUM(cases) India_Cases \nfrom [dbo].[ecdc.cases_deaths_tbl] a \nwhere a.country in ('India','China') and year='2021' and month=1\ngroup by year,month,country\n\n\n\nselect * from  ecdc.cases_deaths_ext;\n\n\ninsert into [dbo].[ecdc.cases_deaths_tbl]\n\nselect * from  [dbo].[ecdc.cases_deaths_tbl]\n\ninsert into [dbo].[ecdc.hospitals_icus_tbl]\n\n\nselect * from  ecdc.hospitals_icus_ext\n\n\nSELECT country, continent, SUM(cases) AS totalCases,SUM(deaths) AS totalDeaths\nFROM [dbo].[ecdc.cases_deaths_tbl]\nGROUP BY CUBE (country, continent,year,month);\n\nCREATE INDEXED VIEW casesDeathsView WITH (DISTRIBUTION=HASH(country,year,month)) AS\n\n--CREATE VIEW casesDeathsView WITH (DISTRIBUTION = HASH([country],[continent],[year],[month])) AS\n\nCREATE VIEW casesDeathsView AS \nselect  country , continent,year,month, SUM(cases) AS totalCases,SUM(deaths) AS totalDeaths\nfrom [dbo].[ecdc.cases_deaths_tbl] \ngroup by country, continent,year,month\nUNION ALLop\nselect  country , null as continent, null as year, null as month, SUM(cases) AS totalCases,SUM(deaths) AS totalDeaths\nfrom [dbo].[ecdc.cases_deaths_tbl]  \ngroup by country\nUNION ALL\nselect  null as country , continent, null as year, null as month, SUM(cases) AS totalCases,SUM(deaths) AS totalDeaths\nfrom [dbo].[ecdc.cases_deaths_tbl]  \ngroup by continent\nUNION ALL\nselect  null as country , null as continent, year, null as month, SUM(cases) AS totalCases,SUM(deaths) AS totalDeaths\nfrom [dbo].[ecdc.cases_deaths_tbl]  \ngroup by year\nUNION ALL\nselect  null as country , null as continent, null as year, month, SUM(cases) AS totalCases,SUM(deaths) AS totalDeaths\nfrom [dbo].[ecdc.cases_deaths_tbl]  \ngroup by month\n\nSELECT a.*,concat(year,'-',month) yearMonth into casesDeaths_cube  FROM casesDeathsView a\n\n* into casesDeaths_cube\n\ndrop table casesDeaths_cube\n\nselect * from casesDeaths_cube where year=2020\n\n\n--order by 2,1,3,4;\n\nselect * from  [dbo].[ecdc.hospitals_icus_tbl]\n\n[dbo].[ecdc.hospitals_icus_tbl]\n\nselect a.*,CONCAT ( CASE\n        WHEN IsNumeric(CONVERT(VARCHAR(12), year)) = 1 THEN CONVERT(VARCHAR(12),year)\n        ELSE 0 END, '-', CASE\n        WHEN IsNumeric(CONVERT(VARCHAR(12), months)) = 1 THEN CONVERT(VARCHAR(12),months)\n        ELSE 0 END,'-1' ) AS yearMonth from  ecdc.hospitals_icus_ext a;\n\nselect cast(CONCAT ( 2021, '-', 1,'-1' ) as date)\n\nselect * from [dbo].[ecdc.cases_deaths_tbl]\n\n\nselect * into [dbo].[ecdc.cases_deaths_tbl] from  ecdc.cases_deaths_ext;\n\ndrop table [dbo].[ecdc.cases_deaths_tbl]",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "poc_sqldw",
+				"poolName": "poc_sqldw"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

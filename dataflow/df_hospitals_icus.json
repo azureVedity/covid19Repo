@@ -1,0 +1,38 @@
+{
+	"name": "df_hospitals_icus",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_source_ecdc_hospital",
+						"type": "DatasetReference"
+					},
+					"name": "sourceHospitalIcu"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_sink_ecdc_hospital_parq",
+						"type": "DatasetReference"
+					},
+					"name": "sinkIcuHopitals"
+				}
+			],
+			"transformations": [
+				{
+					"name": "pivotHospital"
+				},
+				{
+					"name": "filterDailyData"
+				},
+				{
+					"name": "selectIcuHospitals"
+				}
+			],
+			"script": "source(output(\n\t\tcountry as string,\n\t\tindicator as string,\n\t\tdate as date,\n\t\tyear_week as string,\n\t\tvalue as float '###,###.##',\n\t\tsource as string,\n\t\turl as string\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false,\n\tignoreNoFilesFound: false) ~> sourceHospitalIcu\nfilterDailyData pivot(groupBy(country,\n\t\tyear_week = replace(year_week,'W',''),\n\t\tsource,\n\t\turl,\n\t\tyear = year(date),\n\t\tyearMonth = concat(toString(year(date)),\"-\",toString(month(date))),\n\t\tmonths = month(date),\n\t\tdate),\n\tpivotBy(indicator, ['Daily ICU occupancy', 'Daily hospital occupancy']),\n\tcount = sum(toDouble(value)),\n\tcolumnNaming: '$N_$V',\n\tlateral: true) ~> pivotHospital\nsourceHospitalIcu filter(or(indicator==\"Daily ICU occupancy\" ,indicator==\"Daily hospital occupancy\")) ~> filterDailyData\npivotHospital select(mapColumn(\n\t\tcountry,\n\t\tyear_week,\n\t\tsource,\n\t\turl,\n\t\tyear,\n\t\tmonths,\n\t\tdate,\n\t\ticu_count = {count_Daily ICU occupancy},\n\t\thospital_count = {count_Daily hospital occupancy}\n\t),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> selectIcuHospitals\nselectIcuHospitals sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tformat: 'parquet',\n\ttruncate: true,\n\tumask: 0022,\n\tpreCommands: [],\n\tpostCommands: [],\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> sinkIcuHopitals"
+		}
+	}
+}

@@ -1,0 +1,17 @@
+{
+	"name": "hospital_icu_script",
+	"properties": {
+		"content": {
+			"query": "-- This is auto-generated code\nSELECT\n    TOP 100 *\nFROM\n    OPENROWSET(\n        BULK 'https://adlsvedity.dfs.core.windows.net/stage/ecdc/hospital/hospital_icu.csv',\n        FORMAT = 'CSV',\n        PARSER_VERSION='2.0'\n    ) AS [result]\n\n\ndrop external table ecdc.hospitals_icus_ext\n\ncreate external table ecdc.hospitals_icus_ext (\n    country  varchar(8000),\n    year_week  varchar(8000),\n    source varchar(8000),\n    url varchar(8000),\n    year  smallint,\n    months  smallint,    \n    date DATE,\n    icu BIGINT,\n    hospitalized BIGINT\n)\nWITH (\n    LOCATION = 'ecdc/hospitals/*.parquet',\n \tDATA_SOURCE = ecdc_curated_ds,\n\tFILE_FORMAT = ecdc_parquet_format\n\t);\nGO\n\n\nselect value from ecdc.hosptial_icu_ext\nwhere value like '%[^0-9]%'\n\necdc.hosptial_icu_ext\n\n\ndrop external table ecdc.hosptial_icu_ext\n\nselect top 10  *\nfrom   ecdc.hospitals_icus_ext \n\nselect country = ISNULL(country, 'Total'), icu = sum(case when indicator='Daily ICU occupancy' then value else 0 end), hospital = sum(case when indicator='Daily hospital occupancy' then value else 0 end)\nfrom  ecdc.hosptial_icu_ext as a\ngroup by country --with rollup\norder by sum(case when indicator='Daily hospital occupancy' then value else 0 end) desc\n\n\nselect continent = ISNULL(continent, 'Total'), cases = sum(isnull(cases,0)), deaths = sum(isnull(deaths,0))\nfrom  ecdc.hosptial_icu_ext as a\ngroup by continent --with rollup\norder by cases desc\n\nselect top 20 country = ISNULL(country, 'Total'), cases = sum(isnull(cases,0)), deaths = sum(isnull(deaths,0))\nfrom  ecdc.cases_deaths_ext as a\nwhere country not like '%total%'\ngroup by country --with rollup\norder by cases desc\n\nselect year_week week, cases = sum(isnull(cases,0)), deaths = sum(isnull(deaths,0))\nfrom ecdc.cases_deaths_ext as a\nwhere country_code = 'IND'\ngroup by year_week\norder by year_week",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "poc_sqldw",
+				"poolName": "poc_sqldw"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}
